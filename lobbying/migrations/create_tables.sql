@@ -1,12 +1,12 @@
 DROP TABLE IF EXISTS headers;
 DROP TABLE IF EXISTS lobbying_activity;
-DROP TABLE IF EXISTS pre2020_lobbying_activity;
-DROP TABLE IF EXISTS pre_2020_lobbying_activity
+DROP TABLE IF EXISTS pre_2016_lobbying_activity;
+DROP TABLE IF EXISTS pre_2010_lobbying_activity;
 DROP TABLE IF EXISTS campaign_contributions;
 DROP TABLE IF EXISTS client_compensation;
 
 CREATE TABLE IF NOT EXISTS headers (
-  header_id SERIAL,
+  header_id INTEGER UNIQUE,
   source_name VARCHAR(255),
   date_range VARCHAR(50),
   source_type VARCHAR(8),
@@ -17,31 +17,43 @@ CREATE TABLE IF NOT EXISTS headers (
   city_state_zip_code VARCHAR(255),
   country VARCHAR(255),
   phone VARCHAR(50),
-  PRIMARY KEY(source_name, date_range)
+  url VARCHAR(150),
+  PRIMARY KEY(url)
 );
 
-CREATE TABLE IF NOT EXISTS pre_2020_lobbying_activity (
-  header_id VARCHAR(10),
+CREATE TABLE IF NOT EXISTS pre_2016_lobbying_activity (
+  header_id INTEGER,
+  activity_or_bill_no_and_title TEXT,
+  lobbyist_name varchar(255),
+  agent_position VARCHAR(255),
+  direct_business_association TEXT,
+  client_name VARCHAR(255),
+  compensation_received VARCHAR(255)
+
+);
+
+CREATE TABLE IF NOT EXISTS pre_2010_lobbying_activity (
+  header_id INTEGER,
   date VARCHAR(50),
-  activity_or_bill_no_and_title VARCHAR(255),
+  activity_or_bill_no_and_title TEXT,
   lobbyist_name VARCHAR(255),
-  client_represented VARCHAR(100)
+  client_name VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS lobbying_activity (
-  header_id VARCHAR(10),
+  header_id INTEGER,
   lobbyist_name varchar(255),
   client_name varchar(255),
   house_or_senate VARCHAR(255),
   bill_number_or_agency_name VARCHAR(255),
   bill_title_or_activity TEXT,
   agent_position VARCHAR(255),
-  amount VARCHAR(255),
-  direct_business_association VARCHAR(255)
+  compensation_received VARCHAR(255),
+  direct_business_association TEXT
 );
 
 CREATE TABLE IF NOT EXISTS campaign_contributions (
-  header_id VARCHAR(10),
+  header_id INTEGER,
   date VARCHAR(50),
   recipient_name VARCHAR(255),
   lobbyist_name VARCHAR(255),
@@ -50,7 +62,7 @@ CREATE TABLE IF NOT EXISTS campaign_contributions (
 );
 
 CREATE TABLE IF NOT EXISTS client_compensation (
-  header_id VARCHAR(10),
+  header_id INTEGER,
   client_name VARCHAR(255),
   amount VARCHAR(255)
 );
