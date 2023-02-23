@@ -4,8 +4,12 @@ import settings
 import psycopg2
 import psycopg2.extras as extras
 import requests
-import os
 import logging
+
+#####
+# PageFactory:
+#   Takes a url. Verifies that it points to a data page. If not, returns a BlankPage. If so, returns a DataPage
+######
 
 class PageFactory:
     def __new__(cls, url):
@@ -36,9 +40,21 @@ class PageFactory:
             return False
         return True
 
+#####
+# BlankPage:
+#   Just an empty placeholder class, here so I have something to return from PageFactory that implements save()
+#####
+
 class BlankPage:
     def save(self, save_type=None):
         return
+
+#####
+# DataPage:
+#   Represents the data from one disclosure page.
+#   Automatically extracts relevant tables
+#   Can save tables to postgres
+######
 
 class DataPage:
     columns_dict =  {'campaign_contributions':
@@ -62,18 +78,17 @@ class DataPage:
         self.type = 'Entity' if 'Lobbyist Entity' in soup.text else 'Lobbyist'
         self.date_range = soup.find('span', id = lambda tag: tag and tag.startswith("ContentPlaceHolder1_lblYear")).text
         self.year = int(self.date_range[-4:])
-        self.header = self.get_header_table()
+        self.header = self.get_header_table() # Header table has info that we will need later for other tables
         self.tables = self.get_all_tables()
 
-    # gets all the tables
+    ####################
+    # Table Extraction #
+    ####################
+
     def get_all_tables(self):
         tables = SimpleNamespace()
-        # if self.year < 2010:
-        #     tables.pre_2010_lobbying_activity = self.get_pre_2010_lobbying_activity()
-        # elif self.year < 2016:
-        #     tables.pre_2016_lobbying_activity = self.get_pre_2016_lobbying_activity()
-        # else:
-        #     tables.lobbying_activity = self.get_lobbying_activity()
+
+        # For activity tables, we have to figure out which kind we are dealing with
         if 'DateActivity or Bill No and Title' in self.soup.text:
             tables.pre_2010_lobbying_activity = self.get_pre_2010_lobbying_activity()
         if "Agent's positionDirect business association with public officialClient representedCompensation received" in self.soup.text:
@@ -81,20 +96,22 @@ class DataPage:
         elif "House / SenateBill Number or Agency Name" in self.soup.text:
             tables.lobbying_activity = self.get_lobbying_activity()
 
-
+        # MOSTLY a consistent table, except that the individual lobbyist verison doesn't include the lobbyist name
         tables.campaign_contributions = self.get_generic_table("grdvCampaignContribution")
         if self.type == 'Lobbyist':
             for row in tables.campaign_contributions:
                 row.insert(1, self.source_name)
+
+        # Very consistent table
         tables.client_compensation = self.get_generic_table("grdvClientPaidToEntity")
+
         return tables
 
     def get_header_table(self):
-        #id_char = self.type[0]
         header_table = self.soup.find('div',id=lambda tag: tag and tag.startswith("ContentPlaceHolder1_pnl"))
         rows = header_table.findAll('tr')
         row_list = []
-        for row in rows[:-1]: #last row is always blank idk
+        for row in rows[:-1]: #last row is always blank
             cell = " ".join([result.text for result in row.findAll('span', id=lambda tag: tag and "RegistrationInfoReview1_lbl" in tag)])
             row_list.append(cell)
         if self.type == 'Lobbyist':
@@ -102,13 +119,11 @@ class DataPage:
             self.source_name = row_list[0]
         else:
             self.source_name = row_list[2]
-        row_list = self.add_source_to_row(row_list)
+        row_list = [self.source_name, self.type, self.date_range] + row_list
         row_list.append(self.url)
         return row_list
 
-    def add_source_to_row(self, row_list):
-        return [self.source_name, self.type, self.date_range] + row_list
-
+    # pulls a table with an id tag like %table_tag_includes%
     def get_generic_table(self, table_tag_includes, drop_last_row=True):
         table_list = []
         tables = self.soup.findAll('table', id = lambda tag: tag and table_tag_includes in tag)
@@ -119,15 +134,16 @@ class DataPage:
                 table_list.append(self.process_row(row))
         return table_list
 
+    # extracts and cleans a row from a table
     def process_row(self, row, starting_list = None):
         row_list = starting_list if starting_list else []
         cells = row.findAll('td')
         if cells:
             for cell in cells:
                 row_list.append(cell.text.strip().replace('\n', '; '))
-        # row_list = self.add_source_to_row(row_list)
         return row_list
 
+    # There are currently 3 breeds of activity table in the zoo:
     def get_lobbying_activity(self):
         table_text = "lblLobbyistName" if self.type == 'Entity' else "lblClientName"
         full_tables = self.soup.findAll('span',id = lambda tag: tag and table_text in tag)
@@ -156,11 +172,16 @@ class DataPage:
                 table[i].insert(1, self.source_name)
         return table
 
+    # Helper function for modern lobbying activity tables
     def assign_lobbyist_and_client_names(self, full_table):
         if self.type == 'Entity':
             return (full_table.text.replace('Lobbyist: ',""), full_table.findNext('span').text)
         else:
             return (self.header[0], full_table.text)
+
+    ################
+    # Save Methods #
+    ################
 
     def save(self, save_type='psql'):
         if save_type == 'psql':
@@ -174,7 +195,6 @@ class DataPage:
         self.header.insert(0, str(header_id)) #add header id
         table = [tuple(row) for row in [self.header]]
         return self.execute_insert_table_query('headers', table, conn)
-
 
     def write_table_to_psql(self, table_name, conn, header_id):
         table_list = self.tables.__dict__[table_name]
@@ -210,5 +230,3 @@ class DataPage:
                 conn.rollback()
                 cursor.close()
                 return False
-
-
