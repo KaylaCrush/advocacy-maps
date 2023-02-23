@@ -6,11 +6,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-import datetime
+import datetime, logging
 
 def get_lobbyist_urls(year, driver):
     year = str(year)
     url = 'https://www.sec.state.ma.us/LobbyistPublicSearch/Default.aspx'
+
+    logging.info(f"Pulling lobbyist urls for {year} from {url}")
 
     driver.get(url)
 
@@ -30,6 +32,7 @@ def get_lobbyist_urls(year, driver):
     return links_list
 
 def get_disclosure_urls(lobbyist_url, driver):
+    logging.debug(f"Pulling disclosure urls from {lobbyist_url}")
     disclosure_report_urls = []
     driver.get(lobbyist_url)
     all_links = driver.find_elements(By.CLASS_NAME,'BlueLinks')
@@ -60,3 +63,7 @@ def get_latest_disclosures():
         if results:
             disclosure_urls.append(results[-1])
     return disclosure_urls
+
+def get_recent_disclosures():
+    year = datetime.date.today().year
+    return list(set(get_disclosures_by_year(year) + get_disclosures_by_year(year-1)))
