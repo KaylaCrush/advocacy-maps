@@ -80,6 +80,8 @@ class DataPage:
         self.year = int(self.date_range[-4:])
         self.header = self.get_header_table() # Header table has info that we will need later for other tables
         self.tables = self.get_all_tables()
+        logging.info(f"Pulled tables {', '.join([table for table in self.tables if self.tables.__dict__[table]])} from {self.url}")
+
 
     ####################
     # Table Extraction #
@@ -222,11 +224,11 @@ class DataPage:
             try:
                 extras.execute_values(cursor, query, table)
                 conn.commit()
-                logging.info(f"table successfully inserted into table '{table_name}'")
+                logging.debug(f"Data successfully inserted into table '{table_name}'")
                 return True
 
             except (Exception, psycopg2.DatabaseError) as error:
-                print(f"Error: {error} On table {table_name}")
+                logging.warning(f"Error: {error} On table {table_name}")
                 conn.rollback()
                 cursor.close()
                 return False
