@@ -8,17 +8,16 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import datetime, logging
 from bs4 import BeautifulSoup as bs
-import requests
+from utils import pull_html
 
 search_page_url = 'https://www.sec.state.ma.us/LobbyistPublicSearch/'
 
 def get_lobbyist_urls(year):
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     year = str(year)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     url = search_page_url
 
     logging.info(f"Pulling lobbyist urls for {year} from {url}")
-
     driver.get(url)
 
     ##setup the parameters and run the search
@@ -39,21 +38,9 @@ def get_lobbyist_urls(year):
     driver.close()
     return url_list
 
-    # #get the links
-    # find_table = driver.find_element(By.ID,'ContentPlaceHolder1_ucSearchResultByTypeAndCategory_grdvSearchResultByTypeAndCategory')
-    # links = find_table.find_elements(By.TAG_NAME,'a')
-    # links_list = [l.get_attribute('href') for l in links if str(l.get_attribute('href')).startswith('javascript') == False]
-    # return links_list
-
-def pull_html(url):
-    headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
-    result = requests.get(url, headers=headers)
-    result.raise_for_status()
-    return result.content
-
 def get_disclosure_urls(lobbyist_url):
     url = search_page_url
-    logging.debug(f"Pulling disclosure urls from {lobbyist_url}")
+    logging.info(f"Pulling disclosure urls from {lobbyist_url}")
     html = pull_html(lobbyist_url)
     soup = bs(html, 'html.parser')
     results = soup.find_all('a', class_='BlueLinks', href=lambda tag: tag and 'CompleteDisclosure' in tag)
@@ -69,15 +56,15 @@ def get_disclosures_by_year(year):
             disclosure_urls.append(result)
     return disclosure_urls
 
-def get_latest_disclosures():
-    year = datetime.date.today().year
-    lobbyist_urls = get_lobbyist_urls(year)
-    disclosure_urls = []
-    for url in lobbyist_urls:
-        results = get_disclosure_urls(url)
-        if results:
-            disclosure_urls.append(results[-1])
-    return disclosure_urls
+# def get_latest_disclosures():
+#     year = datetime.date.today().year
+#     lobbyist_urls = get_lobbyist_urls(year)
+#     disclosure_urls = []
+#     for url in lobbyist_urls:
+#         results = get_disclosure_urls(url)
+#         if results:
+#             disclosure_urls.append(results[-1])
+#     return disclosure_urls
 
 def get_recent_disclosures():
     year = datetime.date.today().year

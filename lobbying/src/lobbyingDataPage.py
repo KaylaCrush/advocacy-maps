@@ -194,8 +194,7 @@ class DataPage:
                 self.write_table_to_psql(table_name, conn, header_id)
 
     def write_header_to_psql(self, conn, header_id):
-        self.header.insert(0, str(header_id)) #add header id
-        table = [tuple(row) for row in [self.header]]
+        table = [tuple(row) for row in [[str(header_id)]+self.header]]
         return self.execute_insert_table_query('headers', table, conn)
 
     def write_table_to_psql(self, table_name, conn, header_id):

@@ -1,143 +1,129 @@
-import logging, pickle, argparse, datetime
+import logging, argparse, datetime, pickle
+from settings import current_urls_file, urls_dict_file
 from lobbyingDataPage import *
 from lobbyingScraper import *
-from settings import psql_test_params_dict
-
-filename = 'all_current_urls.pkl'
-
-def scrape_current_urls():
-    start_year = 2005
-    end_year = datetime.date.today().year
-    print(f"Pickling all disclosure URLs between {start_year} and {end_year}")
-    urls_dict = {}
-    for year in range(start_year, end_year+1):
-        results = get_disclosures_by_year(year)
-        print(f'{len(results)} disclosures found for year {year}')
-        urls_dict[year] = results
-        with open('urls_dict.pkl', 'wb+') as f:
-            pickle.dump(urls_dict, f)
-    print("Job finished")
+from utils import *
 
 
+########################
+# COMMAND LINE METHODS #
+########################
+# -a --all
+def do_initial_setup():
+    scrape_current_urls_to_dict()
+    process_saved_urls()
 
-# Grab records_per_year for each year between start_year and end_year
-def generate_test_data(start_year = 2005, end_year = 2022, records_to_pull = 100):
-    all_urls = load_and_update_saved_urls()
-    records_per_year = records_to_pull // (end_year - start_year)
-    years = list(range(start_year,end_year+1))*records_per_year
-    url_iterator = iter(all_urls)
-    while years:
-        page = PageFactory(next(url_iterator))
-        print((type(page) == DataPage))
-        if type(page) == DataPage and page.year in years:
-            logging.info(f'Page found, year {page.year}, {len(years)} remaining')
-            page.save(psql_test_params_dict)
-            years.remove(page.year)
-
-def process_saved_urls(offset = 0):
-    all_urls = load_and_update_saved_urls()
-    process_urls(all_urls, offset=offset)
-
-def scrape_latest_urls():
-    new_urls = get_latest_disclosures()
-    unique_new_urls = load_and_update_saved_urls(new_urls, return_all=False)
-    process_urls(unique_new_urls)
-
+# -r --recent
 def scrape_recent_urls():
     new_urls = get_recent_disclosures()
     unique_new_urls = load_and_update_saved_urls(new_urls, return_all=False)
     process_urls(unique_new_urls)
 
-def load_and_update_saved_urls(new_urls = None, return_all = True):
-    with open(filename, 'rb') as f:
-        old_urls = pickle.load(f)
-    if new_urls:
-        old_urls_set = set(old_urls)
-        new_urls_set = set(new_urls).difference(old_urls_set)
-        all_urls_set = old_urls_set.union(new_urls_set)
-        all_urls = list(all_urls_set)
-        new_urls = list(new_urls_set)
-        with open(filename, 'wb') as f: pickle.dump(all_urls, f)
-    else:
-        all_urls = old_urls
-    return all_urls if return_all else new_urls
+# -t --test
+# Grab records_per_year for each year between start_year and end_year
+def generate_test_data(records_per_year = 10):
+    with open(urls_dict_file, 'rb') as f:
+        urls_dict = pickle.load(f)
+    for year in urls_dict.keys():
+        if urls_dict[year]:
+            print(f"Fetching {records_per_year} disclosure reports for {year}")
+            url_iter = iter(urls_dict[year])
+            records_found = 0
+            while records_found < records_per_year:
+                page = PageFactory(next(url_iter))
+                if len([key for key in page.tables.__dict__.keys() if page.tables.__dict__[key]]) > 1:
+                    page.save()
+                    records_found = records_found + 1
 
-def scrape_urls_from_year(year):
-    url_list = get_disclosures_by_year(year)
-    load_and_update_saved_urls(url_list)
-    process_urls(url_list)
+# -p --process
+def process_saved_urls(offset = 0):
+    all_urls = load_and_update_saved_urls()
+    process_urls(all_urls, offset=offset)
+
+
+###############################
+# Command line Helper Methods #
+###############################
+
+# Probably an overloaded function imo. If passed no arguments, simply loads the url dictionary as a list and returns it
+# If given a new dictionary of urls, it will add the new values to url_dict
+# if return_all = true returns a list of all urls
+# if return_all = false returns only new urls not originally present in url_dict
+def load_and_update_saved_urls(new_url_dict = None, return_all = True):
+    with open(urls_dict_file, 'rb') as f:
+        urls_dict = pickle.load(f)
+    returned_urls = []
+    for year in new_url_dict.keys():
+        if new_url_dict:
+            urls_dict[year] = unique_values(urls_dict[year] + new_url_dict[year])
+            if not return_all:
+                returned_urls = returned_urls + new_values(new_url_dict[year], urls_dict[year])
+        else:
+            returned_urls = returned_urls + urls_dict[year]
+    if new_url_dict:
+        with open(current_urls_file, 'wb') as f: pickle.dump(urls_dict, f)
+    return returned_urls
 
 def process_urls(urls, offset = 0):
     for url in urls[offset:]:
         PageFactory(url).save()
 
-def create_list():
-    with open(filename, 'rb') as f:
-        current_urls = pickle.load(f)
+def scrape_current_urls_to_dict():
+    with open(urls_dict_file, 'rb') as f:
+        urls_dict = pickle.load(f)
+    start_year = 2005
+    end_year = datetime.date.today().year
+    print(f"Pickling all disclosure URLs between {start_year} and {end_year}")
+    print(urls_dict.keys())
+    for year in range(start_year, end_year+1):
+        if year not in urls_dict.keys():
+            print(f"Pulling disclosures for year {year}")
+            results = get_disclosures_by_year(year)
+            print(f'{len(results)} disclosures found for year {year}')
+            urls_dict[year] = results
+            with open('urls_dict.pkl', 'wb+') as f:
+                pickle.dump(urls_dict, f)
+    print("Job finished")
 
-    current_urls= list(current_urls)
-
-    with open(filename, 'wb') as f:
-        pickle.dump(current_urls, f)
+###################
+# Argument Parser #
+###################
 
 def parse_arguments():
     verbosity_levels = [logging.ERROR, logging.INFO, logging.DEBUG]
-    process_help = """Process saved urls. Can include index to start from"""
-    recent_help = """Scrape, save, adn process disclosure reports from the last 2 years"""
-    scrape_help = """Scrape, save, and process disclosure reports from a given year from sec.state.ma.us"""
+
+    all_help = """Scrape, process, and save all disclosure reports from sec.state.ma.us"""
+    recent_help = """Scrape, process and save disclosure reports from the last 2 years. Default action"""
     test_help = """Create test data from saved urls and upload them to the database"""
-    url_help = """Scrape and save all disclosure urls from 2005 to present"""
+    process_help = """Process saved urls. Can include a specific year"""
     verbose_help = "set logging level. Default = 0, max = 2"
+
     help_msg = f"""Maple Lobbying Scraper"""
 
     parser = argparse.ArgumentParser(description = help_msg)
-    parser.add_argument('-p','--process', help = process_help, nargs='?', const = 0, type=int)
+    parser.add_argument('-a', '--all', help = all_help, action = 'store_true')
     parser.add_argument('-r', '--recent', help = recent_help, action='store_true')
     parser.add_argument('-t', '--test', help = test_help, action = 'store_true')
-    parser.add_argument('-u', '--urls', help = url_help, action = 'store_true')
-    parser.add_argument('-v',"--verbose", help=verbose_help, action='count', default=0)
-    parser.add_argument('-s', '--scrape', help = scrape_help)
+    parser.add_argument('-p', '--process', help = process_help, nargs = '?')
+    parser.add_argument('-v', '--verbose', help=verbose_help, action='count', default=0)
 
     args = parser.parse_args()
     logging.basicConfig(level=verbosity_levels[args.verbose])
 
-    if args.process is not None:
-        logging.info(f'Processing saved urls starting at index {args.process}')
-        process_saved_urls(args.process)
-    elif args.recent:
-        get_recent_disclosures()
+    if args.all:
+        do_initial_setup()
     elif args.test:
         generate_test_data()
-    elif args.scrape:
-        scrape_urls_from_year(args.scrape)
-    elif args.urls:
-        scrape_current_urls()
-
-#I want to find and upload five pages of each type for each year.
-def generate_test_database():
-    current_urls = load_and_update_saved_urls()
-    start_year = 2005
-    end_year = 2022
-    tally = [[0]*3]*(end_year-start_year)
-
-    for url in current_urls:
-        page=PageFactory(url)
-
-
-    for year in range(start_year, end_year+1):
-        tables = ['campaign_contributions', 'client_compensation']
-        activity_tables = ['pre_2010_lobbying_activity','pre_2016_lobbying_activity','lobbying_activity']
-        index = year-start_year
-        if year < 2010:
-            tables.append(activity_tables[0])
-        elif year < 2016:
-            tables.append(activity_tables[1])
-        else:
-            tables.append(activity_tables[2])
+    elif args.process is not None:
+        logging.info(f'Processing saved urls starting at index {args.process}')
+        process_saved_urls(args.process)
+    else:
+        get_recent_disclosures()
 
 
 
 
+# Main
 if __name__ == "__main__":
     parse_arguments()
 
