@@ -46,7 +46,7 @@ class PageFactory:
 #####
 
 class BlankPage:
-    def save(self, save_type=None):
+    def save(self):
         return
 
 #####
@@ -80,7 +80,7 @@ class DataPage:
         self.year = int(self.date_range[-4:])
         self.header = self.get_header_table() # Header table has info that we will need later for other tables
         self.tables = self.get_all_tables()
-        logging.info(f"Pulled tables {', '.join([table for table in self.tables if self.tables.__dict__[table]])} from {self.url}")
+        logging.info(f"Pulled tables {', '.join([table for table in self.tables.__dict__.keys() if self.tables.__dict__[table]])} from {self.source_name} {self.date_range}")
 
 
     ####################
@@ -185,17 +185,16 @@ class DataPage:
     # Save Methods #
     ################
 
-    def save(self, save_type='psql'):
-        if save_type == 'psql':
-            conn = psycopg2.connect(**settings.psql_params_dict)
-            header_id = self.get_header_id(conn)
-            if self.write_header_to_psql(conn, header_id):
-                for table_name in self.tables.__dict__.keys():
-                    self.write_table_to_psql(table_name, conn, header_id)
+    def save(self, params_dict = None):
+        params_dict = params_dict if params_dict else settings.psql_params_dict
+        conn = psycopg2.connect(**params_dict)
+        header_id = self.get_header_id(conn)
+        if self.write_header_to_psql(conn, header_id):
+            for table_name in self.tables.__dict__.keys():
+                self.write_table_to_psql(table_name, conn, header_id)
 
     def write_header_to_psql(self, conn, header_id):
-        self.header.insert(0, str(header_id)) #add header id
-        table = [tuple(row) for row in [self.header]]
+        table = [tuple(row) for row in [[str(header_id)]+self.header]]
         return self.execute_insert_table_query('headers', table, conn)
 
     def write_table_to_psql(self, table_name, conn, header_id):
