@@ -4,6 +4,10 @@ DROP TABLE IF EXISTS pre_2016_lobbying_activity;
 DROP TABLE IF EXISTS pre_2010_lobbying_activity;
 DROP TABLE IF EXISTS campaign_contributions;
 DROP TABLE IF EXISTS client_compensation;
+DROP TABLE IF EXISTS salaries;
+DROP TABLE IF EXISTS operating_expenses;
+DROP TABLE IF EXISTS met_expenses;
+DROP TABLE IF EXISTS additional_expenses;
 
 CREATE TABLE IF NOT EXISTS headers (
   header_id INTEGER UNIQUE,
@@ -65,4 +69,38 @@ CREATE TABLE IF NOT EXISTS client_compensation (
   header_id INTEGER,
   client_name VARCHAR(255),
   amount VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS salaries (
+  header_id INTEGER,
+  lobbyist_name VARCHAR(255),
+  salary VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS operating_expenses (
+  header_id INTEGER,
+  date varchar(50),
+  recipient VARCHAR(255),
+  type_of_expense VARCHAR(255),
+  amount varchar(20)
+);
+
+CREATE TABLE IF NOT EXISTS met_expenses (
+  header_id INTEGER,
+  date VARCHAR(50),
+  lobbyist_name VARCHAR(255),
+  event_type VARCHAR(255),
+  payee VARCHAR(255),
+  attendees VARCHAR(255),
+  amount VARCHAR(20)
+);
+
+CREATE TABLE IF NOT EXISTS additional_expenses (
+  header_id INTEGER,
+  date_from VARCHAR(20),
+  date_to VARCHAR(20),
+  lobbyist_name VARCHAR(255),
+  recipient_name VARCHAR(255),
+  expense VARCHAR(255),
+  amount VARCHAR(20)
 );

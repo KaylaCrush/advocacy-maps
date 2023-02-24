@@ -69,6 +69,14 @@ class DataPage:
                         ['Date','Activity or bill No and Title','Lobbyist name','Client name'],
                     'headers':
                         ['source_name','source_type','date_range','authorizing_officer_or_lobbyist_name','agent_type_or_title','business_name','address','city_state_zip_code','country', 'phone', 'url'],
+                    'salaries':
+                        ['lobbyist_name','salary'],
+                    'operating_expenses':
+                        ['date','recipient','type_of_expense','amount'],
+                    'met_expenses':
+                        ['date','lobbyist_name','event_type','payee','attendees','amount'],
+                    'additional_expenses':
+                        ['date_from','date_to','lobbyist_name','recipient_name','expense','amount'],
                     'all':
                         ['header_id']}
 
@@ -99,13 +107,18 @@ class DataPage:
             tables.lobbying_activity = self.get_lobbying_activity()
 
         # MOSTLY a consistent table, except that the individual lobbyist verison doesn't include the lobbyist name
-        tables.campaign_contributions = self.get_generic_table("grdvCampaignContribution")
+        tables.campaign_contributions = self.get_generic_table("CampaignContribution")
         if self.type == 'Lobbyist':
             for row in tables.campaign_contributions:
                 row.insert(1, self.source_name)
 
-        # Very consistent table
-        tables.client_compensation = self.get_generic_table("grdvClientPaidToEntity")
+        # Very consistent tables
+        tables.client_compensation = self.get_generic_table("ClientPaidToEntity")
+        tables.salaries = self.get_generic_table('SalaryPaid')
+        tables.operating_expenses = self.get_generic_table("OperatingExpenses")
+        tables.met_expenses = self.get_generic_table("METExpenses")
+        tables.additional_expenses = self.get_generic_table("AdditionalExpenses")
+
 
         return tables
 
@@ -126,13 +139,13 @@ class DataPage:
         return row_list
 
     # pulls a table with an id tag like %table_tag_includes%
-    def get_generic_table(self, table_tag_includes, drop_last_row=True):
+    def get_generic_table(self, table_tag_includes, drop_last = True):
         table_list = []
         tables = self.soup.findAll('table', id = lambda tag: tag and table_tag_includes in tag)
         for table in tables:
             rows = table.findAll('tr', class_=lambda tag: tag and 'Grid' in tag and 'Header' not in tag)
-            rows = rows[:-1] if drop_last_row else rows
-            for row in rows[:-1]: #last row is total
+            if drop_last: rows = rows[:-1]
+            for row in rows: #last row is total
                 table_list.append(self.process_row(row))
         return table_list
 
@@ -154,21 +167,20 @@ class DataPage:
             lobbyist_name, client_name = self.assign_lobbyist_and_client_names(full_table)
             table = full_table.findNext('table').findNext('table')
             rows = table.findAll('tr', class_=lambda tag: tag and 'Grid' in tag and 'Header' not in tag)
-            for row in rows:
-                table_list.append(self.process_row(row, [lobbyist_name, client_name]))
-        if table_list and 'No activities were disclosed for this reporting period.' in table_list[0]:
-            return []
+            if 'No activities were disclosed for this reporting period.' not in rows:
+                for row in rows:
+                    table_list.append(self.process_row(row, [lobbyist_name, client_name]))
         return table_list
 
     def get_pre_2010_lobbying_activity(self):
-        table = self.get_generic_table('grdvActivities', drop_last_row=False)
+        table = self.get_generic_table('grdvActivities', drop_last_row = False)
         if self.type == 'Lobbyist':
             for i in range(len(table)):
                 table[i].insert(-1, self.source_name)
         return table
 
     def get_pre_2016_lobbying_activity(self):
-        table = self.get_generic_table('grdvActivities', drop_last_row=False)
+        table = self.get_generic_table('grdvActivities', drop_last_row = False)
         if self.type == 'Lobbyist':
             for i in range(len(table)):
                 table[i].insert(1, self.source_name)
@@ -212,7 +224,7 @@ class DataPage:
             header_id = response + 1 if response else 1
             return header_id
 
-    #returns true if all rows of the table, if any, are uploaded to the database
+    #returns true if all rows of the table are uploaded to the database or if table is empty
     #returns false if any errors occur
     def execute_insert_table_query(self, table_name, table, conn):
         columns = DataPage.columns_dict['all'] + DataPage.columns_dict[table_name]
