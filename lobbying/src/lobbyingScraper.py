@@ -7,10 +7,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import datetime, logging
+from bs4 import BeautifulSoup as bs
+import requests
 
-def get_lobbyist_urls(year, driver):
+search_page_url = 'https://www.sec.state.ma.us/LobbyistPublicSearch/'
+
+def get_lobbyist_urls(year):
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     year = str(year)
-    url = 'https://www.sec.state.ma.us/LobbyistPublicSearch/Default.aspx'
+    url = search_page_url
 
     logging.info(f"Pulling lobbyist urls for {year} from {url}")
 
@@ -25,41 +30,51 @@ def get_lobbyist_urls(year, driver):
     Select(driver.find_element('id','ContentPlaceHolder1_ucSearchCriteriaByType_drpType')).select_by_value('L')
     driver.find_element('id','ContentPlaceHolder1_btnSearch').click()
 
-    #get the links
-    find_table = driver.find_element(By.ID,'ContentPlaceHolder1_ucSearchResultByTypeAndCategory_grdvSearchResultByTypeAndCategory')
-    links = find_table.find_elements(By.TAG_NAME,'a')
-    links_list = [l.get_attribute('href') for l in links if str(l.get_attribute('href')).startswith('javascript') == False]
-    return links_list
+    html = driver.page_source
+    soup = bs(html, 'html.parser')
 
-def get_disclosure_urls(lobbyist_url, driver):
+    url_list = []
+    griditems = soup.find_all('a', class_=lambda tag: tag and tag=='BlueLinks', id=lambda tag: tag and 'SearchResultByTypeAndCategory' in tag)
+    url_list = [url+item.attrs['href'] for item in griditems]
+    driver.close()
+    return url_list
+
+    # #get the links
+    # find_table = driver.find_element(By.ID,'ContentPlaceHolder1_ucSearchResultByTypeAndCategory_grdvSearchResultByTypeAndCategory')
+    # links = find_table.find_elements(By.TAG_NAME,'a')
+    # links_list = [l.get_attribute('href') for l in links if str(l.get_attribute('href')).startswith('javascript') == False]
+    # return links_list
+
+def pull_html(url):
+    headers={"User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"}
+    result = requests.get(url, headers=headers)
+    result.raise_for_status()
+    return result.content
+
+def get_disclosure_urls(lobbyist_url):
+    url = search_page_url
     logging.debug(f"Pulling disclosure urls from {lobbyist_url}")
-    disclosure_report_urls = []
-    driver.get(lobbyist_url)
-    all_links = driver.find_elements(By.CLASS_NAME,'BlueLinks')
-    disclosure_links = [l.get_attribute('href') for l in all_links if 'CompleteDisclosure' in l.get_attribute('href')]
-
-    for disclosure_link in disclosure_links:
-        disclosure_report_urls.append(disclosure_link)
-
-    return disclosure_report_urls
+    html = pull_html(lobbyist_url)
+    soup = bs(html, 'html.parser')
+    results = soup.find_all('a', class_='BlueLinks', href=lambda tag: tag and 'CompleteDisclosure' in tag)
+    url_list = [url+item.attrs['href'] for item in results]
+    return url_list
 
 def get_disclosures_by_year(year):
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    lobbyist_urls = get_lobbyist_urls(year, driver)
+    lobbyist_urls = get_lobbyist_urls(year)
     disclosure_urls = []
     for url in lobbyist_urls:
-        results = get_disclosure_urls(url, driver)
+        results = get_disclosure_urls(url)
         for result in results:
             disclosure_urls.append(result)
     return disclosure_urls
 
 def get_latest_disclosures():
     year = datetime.date.today().year
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    lobbyist_urls = get_lobbyist_urls(year, driver)
+    lobbyist_urls = get_lobbyist_urls(year)
     disclosure_urls = []
     for url in lobbyist_urls:
-        results = get_disclosure_urls(url, driver)
+        results = get_disclosure_urls(url)
         if results:
             disclosure_urls.append(results[-1])
     return disclosure_urls
